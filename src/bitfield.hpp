@@ -16,23 +16,32 @@
 
 #include <memory>
 
-struct bitfield
+#include "util.hpp"
+
+struct Bitfield
 {
-    explicit bitfield(int64_t size)
-        : buffer_(new uint64_t[(size + 63) / 64])
-        , size_((size + 63) / 64)
+    Bitfield() : size_(0) {}
+
+    explicit Bitfield(int64_t size_bits)
+        : buffer_(new uint64_t[(size_bits + 63) / 64]())
+        , size_((size_bits + 63) / 64)
     {
-        clear();
     }
 
     void set(int64_t const bit)
     {
+        if (size_ == 0) {
+          return;
+        }
         assert(bit / 64 < size_);
         buffer_[bit / 64] |= uint64_t(1) << (bit % 64);
     }
 
     bool get(int64_t const bit) const
     {
+        if (size_ == 0) {
+          return false;
+        }
         assert(bit / 64 < size_);
         return (buffer_[bit / 64] & (uint64_t(1) << (bit % 64))) != 0;
     }
@@ -44,15 +53,15 @@ struct bitfield
 
     int64_t size() const { return size_ * 64; }
 
-    void swap(bitfield& rhs)
-    {
-        using std::swap;
-        swap(buffer_, rhs.buffer_);
-        swap(size_, rhs.size_);
-    }
+    const uint8_t * data() const { return reinterpret_cast<const uint8_t*>(buffer_.get()); }
+    uint8_t * data() { return reinterpret_cast<uint8_t*>(buffer_.get()); }
+    size_t size_bytes() const { return size_ * 8; }
 
     int64_t count(int64_t const start_bit, int64_t const end_bit) const
     {
+        if (size_ == 0) {
+          return 0;
+        }
         assert((start_bit % 64) == 0);
         assert(start_bit <= end_bit);
 
@@ -74,7 +83,7 @@ struct bitfield
     void free_memory()
     {
         buffer_.reset();
-        size_ = 0;
+        // Don't reset size so that we remember to delete.
     }
 private:
     std::unique_ptr<uint64_t[]> buffer_;

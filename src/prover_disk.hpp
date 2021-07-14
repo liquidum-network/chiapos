@@ -35,6 +35,7 @@
 #include "entry_sizes.hpp"
 #include "util.hpp"
 
+
 struct plot_header {
     uint8_t magic[19];
     uint8_t id[32];

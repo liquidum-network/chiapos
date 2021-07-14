@@ -28,8 +28,10 @@
 #include "bits.hpp"
 #include "exceptions.hpp"
 #include "util.hpp"
+#include "fastmath.hpp"
 
 #include <mutex>
+
 
 class TMemoCache {
 public:
@@ -88,7 +90,7 @@ private:
     std::map<double, FSE_DTable *> DT_MEMO;
 };
 
-TMemoCache tmCache;
+extern TMemoCache tmCache;
 
 class Encoding {
 public:
@@ -154,10 +156,12 @@ public:
             p /= pow(E, ((N + 1) / R));
         }
 
+        constexpr auto fastmath = FastMath{};
+
         std::vector<short> ans(N, 1);
-        auto cmp = [&dpdf, &ans](int i, int j) {
-            return dpdf[i] * (log2(ans[i] + 1) - log2(ans[i])) <
-                   dpdf[j] * (log2(ans[j] + 1) - log2(ans[j]));
+        auto cmp = [&dpdf, &ans, &fastmath](int i, int j) {
+            return dpdf[i] * (fastmath.log2(ans[i] + 1) - fastmath.log2(ans[i])) <
+                   dpdf[j] * (fastmath.log2(ans[j] + 1) - fastmath.log2(ans[j]));
         };
 
         std::priority_queue<int, std::vector<int>, decltype(cmp)> pq(cmp);
@@ -178,26 +182,23 @@ public:
         return ans;
     }
 
-    static size_t ANSEncodeDeltas(std::vector<unsigned char> deltas, double R, uint8_t *out)
+    static size_t ANSEncodeDeltas(const std::vector<unsigned char>& deltas, double R, uint8_t *out)
     {
         if (!tmCache.CTExists(R)) {
             std::vector<short> nCount = Encoding::CreateNormalizedCount(R);
             unsigned maxSymbolValue = nCount.size() - 1;
             unsigned tableLog = 14;
 
-            if (maxSymbolValue > 255)
-                throw std::invalid_argument("maxSymbolValue > 255");
+            CHECK_LE(maxSymbolValue, 255);
             FSE_CTable *ct = FSE_createCTable(maxSymbolValue, tableLog);
             size_t err = FSE_buildCTable(ct, nCount.data(), maxSymbolValue, tableLog);
-            if (FSE_isError(err)) {
-                throw InvalidStateException(FSE_getErrorName(err));
-            }
+            CHECK(!FSE_isError(err), FSE_getErrorName(err));
             tmCache.CTAssign(R, ct);
         }
 
         FSE_CTable *ct = tmCache.CTGet(R);
         return FSE_compress_usingCTable(
-            out, deltas.size() * 8, static_cast<void *>(deltas.data()), deltas.size(), ct);
+            out, deltas.size() * 8, static_cast<const void *>(deltas.data()), deltas.size(), ct);
     }
 
     static void ANSFree(double R)
@@ -218,9 +219,7 @@ public:
 
             FSE_DTable *dt = FSE_createDTable(tableLog);
             size_t err = FSE_buildDTable(dt, nCount.data(), maxSymbolValue, tableLog);
-            if (FSE_isError(err)) {
-                throw InvalidStateException(FSE_getErrorName(err));
-            }
+            CHECK(!FSE_isError(err), FSE_getErrorName(err));
             tmCache.DTAssign(R, dt);
         }
 
@@ -229,14 +228,10 @@ public:
         std::vector<uint8_t> deltas(numDeltas);
         size_t err = FSE_decompress_usingDTable(&deltas[0], numDeltas, inp, inp_size, dt);
 
-        if (FSE_isError(err)) {
-            throw InvalidStateException(FSE_getErrorName(err));
-        }
+        CHECK(!FSE_isError(err), FSE_getErrorName(err));
 
         for (uint32_t i = 0; i < deltas.size(); i++) {
-            if (deltas[i] == 0xff) {
-                throw InvalidStateException("Bad delta detected");
-            }
+            CHECK_NE(deltas[i], 0xff, "Bad delta detected");
         }
         return deltas;
     }

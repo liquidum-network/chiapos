@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "../lib/include/picosha2.hpp"
 #include "calculate_bucket.hpp"
 
 class Verifier {
@@ -89,15 +90,13 @@ public:
             std::vector<Bits> new_ys;
             std::vector<Bits> new_metadata;
             for (int i = 0; i < (1 << (8 - depth)); i += 2) {
-                PlotEntry l_plot_entry{};
-                PlotEntry r_plot_entry{};
-                l_plot_entry.y = ys[i].GetValue();
-                r_plot_entry.y = ys[i + 1].GetValue();
-                std::vector<PlotEntry> bucket_L = {l_plot_entry};
-                std::vector<PlotEntry> bucket_R = {r_plot_entry};
+                uint64_t l_plot_entry_y = ys[i].GetValue();
+                uint64_t r_plot_entry_y = ys[i + 1].GetValue();
+                std::vector<uint64_t> bucket_L = {l_plot_entry_y};
+                std::vector<uint64_t> bucket_R = {r_plot_entry_y};
 
                 // If there is no match, fails.
-                uint64_t cdiff = r_plot_entry.y / kBC - l_plot_entry.y / kBC;
+                uint64_t cdiff = r_plot_entry_y / kBC - l_plot_entry_y / kBC;
                 if (cdiff != 1) {
                     return LargeBits();
                 } else {

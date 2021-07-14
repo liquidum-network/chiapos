@@ -26,7 +26,7 @@ const uint32_t kOffsetSize = 10;
 // Max matches a single entry can have, used for hardcoded memory allocation
 const uint32_t kMaxMatchesSingleEntry = 30;
 const uint32_t kMinBuckets = 16;
-const uint32_t kMaxBuckets = 128;
+const uint32_t kMaxBuckets = 256;
 
 // During backprop and compress, the write pointer is ahead of the read pointer
 // Note that the large the offset, the higher these values must be
@@ -72,7 +72,7 @@ const uint8_t kStubMinusBits = 3;
 // The ANS encoding R values for the 7 final plot tables
 // Tweaking the R values might allow lowering of the max average deltas, and reducing final
 // plot size
-const double kRValues[7] = {4.7, 2.75, 2.75, 2.7, 2.6, 2.45};
+constexpr double kRValues[7] = {4.7, 2.75, 2.75, 2.7, 2.6, 2.45};
 
 // The ANS encoding R value for the C3 checkpoint table
 const double kC3R = 1.0;
@@ -81,15 +81,5 @@ const double kC3R = 1.0;
 // above contants are changed, or file format is changed, the version should
 // be incremented.
 const std::string kFormatDescription = "v1.0";
-
-struct PlotEntry {
-    uint64_t y;
-    uint64_t pos;
-    uint64_t offset;
-    uint128_t left_metadata;   // We only use left_metadata, unless metadata does not
-    uint128_t right_metadata;  // fit in 128 bits.
-    bool used;                 // Whether the entry was used in the next table of matches
-    uint64_t read_posoffset;   // The combined pos and offset that this entry points to
-};
 
 #endif  // SRC_CPP_POS_CONSTANTS_HPP_

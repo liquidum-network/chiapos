@@ -19,9 +19,14 @@ CMakeFiles
 Makefile
 **/*.rendered.*.cpp
 **/*.cppimporthash
-build
+build/
 .pytest_cache
 **/*.egg-info
 .mypy_cache
 *.whl
 venv
+*~
+.*.swp
+build_debug/
+ext/
+logs/

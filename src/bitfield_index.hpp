@@ -23,7 +23,7 @@ struct bitfield_index
     // For a bitfield of size 2^32, this means a 32 MiB index
     static inline const int64_t kIndexBucket = 1024;
 
-    bitfield_index(bitfield const& b) : bitfield_(b)
+    bitfield_index(Bitfield const& b) : bitfield_(b)
     {
         uint64_t counter = 0;
         index_.reserve(bitfield_.size() / kIndexBucket);
@@ -57,7 +57,7 @@ struct bitfield_index
         return { base + pos_count, offset_count - pos_count };
     }
 private:
-    bitfield const& bitfield_;
+    Bitfield const& bitfield_;
     std::vector<uint64_t> index_;
 };
 

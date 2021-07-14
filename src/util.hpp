@@ -15,6 +15,7 @@
 #ifndef SRC_CPP_UTIL_HPP_
 #define SRC_CPP_UTIL_HPP_
 
+#include <immintrin.h>
 #include <cassert>
 #include <chrono>
 #include <cstring>
@@ -31,6 +32,8 @@
 #include <utility>
 #include <vector>
 
+#include "logging.hpp"
+
 template <typename Int>
 constexpr inline Int cdiv(Int a, int b) { return (a + b - 1) / b; }
 
@@ -45,7 +48,7 @@ constexpr inline Int cdiv(Int a, int b) { return (a + b - 1) / b; }
 typedef __uint128_t uint128_t;
 
 // Allows printing of uint128_t
-std::ostream &operator<<(std::ostream &strm, uint128_t const &v)
+inline std::ostream &operator<<(std::ostream &strm, uint128_t const &v)
 {
     strm << "uint128(" << (uint64_t)(v >> 64) << "," << (uint64_t)(v & (((uint128_t)1 << 64) - 1))
          << ")";
@@ -128,8 +131,7 @@ public:
 
         double cpu_ratio = static_cast<int>(10000 * (cpu_time_ms / wall_clock_ms)) / 100.0;
 
-        std::cout << name << " " << (wall_clock_ms / 1000.0) << " seconds. CPU (" << cpu_ratio
-                  << "%) " << Timer::GetNow();
+        SPDLOG_INFO("{} {} seconds. CPU ({}%)", name, wall_clock_ms / 1000.0, cpu_ratio);
     }
 
 private:
@@ -201,7 +203,7 @@ namespace Util {
         return bswap_64(i);
     }
 
-    static void IntTo16Bytes(uint8_t *result, const uint128_t input)
+    static inline void IntTo16Bytes(uint8_t *result, const uint128_t input)
     {
         uint64_t r = bswap_64(input >> 64);
         memcpy(result, &r, sizeof(r));
@@ -209,17 +211,9 @@ namespace Util {
         memcpy(result + 8, &r, sizeof(r));
     }
 
-    /*
-     * Retrieves the size of an integer, in Bits.
-     */
-    inline uint8_t GetSizeBits(uint128_t value)
+    inline int GetSizeBits(uint64_t val)
     {
-        uint8_t count = 0;
-        while (value) {
-            count++;
-            value >>= 1;
-        }
-        return count;
+        return 64 - _lzcnt_u64(val);
     }
 
     // 'bytes' points to a big-endian 64 bit value (possibly truncated, if
@@ -273,16 +267,6 @@ namespace Util {
         return ((uint128_t)high << 64) | low;
     }
 
-    inline void GetRandomBytes(uint8_t *buf, uint32_t num_bytes)
-    {
-        std::random_device rd;
-        std::mt19937 mt(rd());
-        std::uniform_int_distribution<int> dist(0, 255);
-        for (uint32_t i = 0; i < num_bytes; i++) {
-            buf[i] = dist(mt);
-        }
-    }
-
     inline uint64_t ExtractNum(
         const uint8_t *bytes,
         uint32_t len_bytes,
@@ -295,36 +279,23 @@ namespace Util {
         return Util::SliceInt64FromBytes(bytes, begin_bits, take_bits);
     }
 
-    // The number of memory entries required to do the custom SortInMemory algorithm, given the
-    // total number of entries to be sorted.
-    inline uint64_t RoundSize(uint64_t size)
-    {
-        size *= 2;
-        uint64_t result = 1;
-        while (result < size) result *= 2;
-        return result + 50;
-    }
-
     /*
      * Like memcmp, but only compares starting at a certain bit.
      */
     inline int MemCmpBits(
-        uint8_t *left_arr,
-        uint8_t *right_arr,
+        const uint8_t *left_arr,
+        const uint8_t *right_arr,
         uint32_t len,
-        uint32_t bits_begin)
+        uint32_t bits_begin) noexcept
     {
         uint32_t start_byte = bits_begin / 8;
         uint8_t mask = ((1 << (8 - (bits_begin % 8))) - 1);
-        if ((left_arr[start_byte] & mask) != (right_arr[start_byte] & mask)) {
-            return (left_arr[start_byte] & mask) - (right_arr[start_byte] & mask);
-        }
 
-        for (uint32_t i = start_byte + 1; i < len; i++) {
-            if (left_arr[i] != right_arr[i])
-                return left_arr[i] - right_arr[i];
+        auto diff = (left_arr[start_byte] & mask) - (right_arr[start_byte] & mask);
+        if (diff != 0) {
+          return diff;
         }
-        return 0;
+        return memcmp(left_arr + start_byte + 1, right_arr + start_byte + 1, len - start_byte - 1);
     }
 
     inline double RoundPow2(double a)
@@ -341,7 +312,7 @@ namespace Util {
     }
 
 #if defined(_WIN32) || defined(__x86_64__)
-    void CpuID(uint32_t leaf, uint32_t *regs)
+    inline void CpuID(uint32_t leaf, uint32_t *regs)
     {
 #if defined(_WIN32)
         __cpuid((int *)regs, (int)leaf);
@@ -350,7 +321,7 @@ namespace Util {
 #endif /* defined(_WIN32) */
     }
 
-    bool HavePopcnt(void)
+    inline bool HavePopcnt(void)
     {
         // EAX, EBX, ECX, EDX
         uint32_t regs[4] = {0};

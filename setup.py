@@ -41,6 +41,8 @@ class CMakeBuild(build_ext):
         extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
         cmake_args = [
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + str(extdir),
+            "-DBUILD_DEPS:BOOL=ON",
+            "-DCMAKE_TOOLCHAIN_FILE=" + os.path.expanduser("~/storage/vcpkg/scripts/buildsystems/vcpkg.cmake"),
             "-DPYTHON_EXECUTABLE=" + sys.executable,
         ]
 
@@ -65,7 +67,7 @@ class CMakeBuild(build_ext):
         if not os.path.exists(self.build_temp):
             os.makedirs(self.build_temp)
         subprocess.check_call(
-            ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
+            ["cmake", "-H.", "-B", self.build_temp] + cmake_args, cwd=os.path.dirname(os.path.abspath(__file__)), env=env
         )
         subprocess.check_call(
             ["cmake", "--build", "."] + build_args, cwd=self.build_temp

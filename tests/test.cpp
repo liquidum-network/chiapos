@@ -27,6 +27,16 @@
 
 using namespace std;
 
+inline void GetRandomBytes(uint8_t *buf, uint32_t num_bytes)
+{
+    std::random_device rd;
+    std::mt19937 mt(rd());
+    std::uniform_int_distribution<int> dist(0, 255);
+    for (uint32_t i = 0; i < num_bytes; i++) {
+        buf[i] = dist(mt);
+    }
+}
+
 uint8_t plot_id_1[] = {35,  2,   52,  4,  51, 55,  23,  84, 91, 10, 111, 12,  13,  222, 151, 16,
                        228, 211, 254, 45, 92, 198, 204, 10, 9,  10, 11,  129, 139, 171, 15,  23};
 
@@ -688,7 +698,7 @@ TEST_CASE("Sort on disk")
 
     SECTION("File disk")
     {
-        FileDisk d = FileDisk("test_file.bin");
+        auto d = FileDisk::CreateForTesting("test_file.bin");
         uint8_t buf[5] = {1, 2, 3, 5, 7};
         d.Write(250, buf, 5);
 
@@ -761,7 +771,7 @@ TEST_CASE("Sort on disk")
         uint32_t const size = 32;
         vector<Bits> input;
         uint32_t begin = 1000;
-        FileDisk disk("test_file.bin");
+        auto disk = FileDisk::CreateForTesting("test_file.bin");
 
         for (uint32_t i = 0; i < iters; i++) {
             vector<unsigned char> hash_input = intToBytes(i, 4);
@@ -845,14 +855,14 @@ TEST_CASE("bitfield_index-simple")
     b.set(1);
     b.set(3);
     bitfield_index const idx(b);
-    CHECK(idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0});
-    CHECK(idx.lookup(0, 1) == std::pair<uint64_t, uint64_t>{0,1});
+    CHECK((idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0}));
+    CHECK((idx.lookup(0, 1) == std::pair<uint64_t, uint64_t>{0,1}));
 
-    CHECK(idx.lookup(0, 3) == std::pair<uint64_t, uint64_t>{0,2});
+    CHECK((idx.lookup(0, 3) == std::pair<uint64_t, uint64_t>{0,2}));
 
-    CHECK(idx.lookup(1, 0) == std::pair<uint64_t, uint64_t>{1,0});
-    CHECK(idx.lookup(1, 2) == std::pair<uint64_t, uint64_t>{1,1});
-    CHECK(idx.lookup(3, 0) == std::pair<uint64_t, uint64_t>{2,0});
+    CHECK((idx.lookup(1, 0) == std::pair<uint64_t, uint64_t>{1,0}));
+    CHECK((idx.lookup(1, 2) == std::pair<uint64_t, uint64_t>{1,1}));
+    CHECK((idx.lookup(3, 0) == std::pair<uint64_t, uint64_t>{2,0}));
 }
 
 TEST_CASE("bitfield_index-use index")
@@ -863,8 +873,8 @@ TEST_CASE("bitfield_index-use index")
     b.set(1048576 - 2);
     b.set(1048576 - 1);
     bitfield_index const idx(b);
-    CHECK(idx.lookup(1048576 - 3, 1) == std::pair<uint64_t, uint64_t>{0,1});
-    CHECK(idx.lookup(1048576 - 2, 1) == std::pair<uint64_t, uint64_t>{1,1});
+    CHECK((idx.lookup(1048576 - 3, 1) == std::pair<uint64_t, uint64_t>{0,1}));
+    CHECK((idx.lookup(1048576 - 2, 1) == std::pair<uint64_t, uint64_t>{1,1}));
 }
 
 TEST_CASE("bitfield_index edge-cases")
@@ -876,19 +886,19 @@ TEST_CASE("bitfield_index edge-cases")
     b.set(bitfield_index::kIndexBucket * 2);
     b.set(1048576 - 1);
     bitfield_index const idx(b);
-    CHECK(idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0});
-    CHECK(idx.lookup(0, bitfield_index::kIndexBucket) == std::pair<uint64_t, uint64_t>{0,1});
-    CHECK(idx.lookup(0, bitfield_index::kIndexBucket * 2) == std::pair<uint64_t, uint64_t>{0,2});
-    CHECK(idx.lookup(0, 1048576 - 1) == std::pair<uint64_t, uint64_t>{0,3});
+    CHECK((idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0}));
+    CHECK((idx.lookup(0, bitfield_index::kIndexBucket) == std::pair<uint64_t, uint64_t>{0,1}));
+    CHECK((idx.lookup(0, bitfield_index::kIndexBucket * 2) == std::pair<uint64_t, uint64_t>{0,2}));
+    CHECK((idx.lookup(0, 1048576 - 1) == std::pair<uint64_t, uint64_t>{0,3}));
 
-    CHECK(idx.lookup(bitfield_index::kIndexBucket, 0) == std::pair<uint64_t, uint64_t>{1,0});
-    CHECK(idx.lookup(bitfield_index::kIndexBucket, bitfield_index::kIndexBucket) == std::pair<uint64_t, uint64_t>{1,1});
-    CHECK(idx.lookup(bitfield_index::kIndexBucket, 1048576 - 1 - bitfield_index::kIndexBucket)
-        == std::pair<uint64_t, uint64_t>{1,2});
+    CHECK((idx.lookup(bitfield_index::kIndexBucket, 0) == std::pair<uint64_t, uint64_t>{1,0}));
+    CHECK((idx.lookup(bitfield_index::kIndexBucket, bitfield_index::kIndexBucket) == std::pair<uint64_t, uint64_t>{1,1}));
+    CHECK((idx.lookup(bitfield_index::kIndexBucket, 1048576 - 1 - bitfield_index::kIndexBucket)
+        == std::pair<uint64_t, uint64_t>{1,2}));
 
-    CHECK(idx.lookup(bitfield_index::kIndexBucket * 2, 1048576 - 1 - bitfield_index::kIndexBucket * 2)
-        == std::pair<uint64_t, uint64_t>{2,1});
-    CHECK(idx.lookup(1048576 - 1, 0) == std::pair<uint64_t, uint64_t>{3,0});
+    CHECK((idx.lookup(bitfield_index::kIndexBucket * 2, 1048576 - 1 - bitfield_index::kIndexBucket * 2)
+        == std::pair<uint64_t, uint64_t>{2,1}));
+    CHECK((idx.lookup(1048576 - 1, 0) == std::pair<uint64_t, uint64_t>{3,0}));
 }
 
 void test_bitfield_size(int const size)
@@ -897,9 +907,9 @@ void test_bitfield_size(int const size)
     b.set(0);
     b.set(size - 1);
     bitfield_index const idx(b);
-    CHECK(idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0});
-    CHECK(idx.lookup(0, size - 1) == std::pair<uint64_t, uint64_t>{0,1});
-    CHECK(idx.lookup(size - 1, 0) == std::pair<uint64_t, uint64_t>{1,0});
+    CHECK((idx.lookup(0, 0) == std::pair<uint64_t, uint64_t>{0,0}));
+    CHECK((idx.lookup(0, size - 1) == std::pair<uint64_t, uint64_t>{0,1}));
+    CHECK((idx.lookup(size - 1, 0) == std::pair<uint64_t, uint64_t>{1,0}));
 }
 
 TEST_CASE("bitfield_index edge-sizes")
@@ -926,7 +936,7 @@ void write_disk_file(FileDisk& df)
 
 TEST_CASE("FileDisk")
 {
-    FileDisk d = FileDisk("test_file.bin");
+    auto d = FileDisk::CreateForTesting("test_file.bin");
     write_disk_file(d);
 
     std::uint32_t val = 0;
@@ -945,10 +955,10 @@ TEST_CASE("FileDisk")
 
 TEST_CASE("BufferedDisk")
 {
-    FileDisk d = FileDisk("test_file.bin");
+    auto d = FileDisk::CreateForTesting("test_file.bin");
     write_disk_file(d);
 
-    BufferedDisk bd(&d, num_test_entries * 4);
+    BufferedDisk bd("test_file.bin", num_test_entries * 4);
 
     for (uint32_t i = 0; i < num_test_entries; ++i) {
         auto const val = *reinterpret_cast<std::uint32_t const*>(bd.Read(i * 4, 4));
@@ -967,12 +977,12 @@ TEST_CASE("BufferedDisk")
 
 TEST_CASE("FilteredDisk")
 {
-    FileDisk d = FileDisk("test_file.bin");
+    auto d = FileDisk::CreateForTesting("test_file.bin");
     write_disk_file(d);
 
     SECTION("filter even")
     {
-        BufferedDisk bd(&d, num_test_entries * 4);
+        BufferedDisk bd("test_file.bin", num_test_entries * 4);
         // filter every other entry (starting with 0)
         bitfield filter(num_test_entries);
         for (int i = 0; i < num_test_entries; ++i) {
@@ -995,7 +1005,7 @@ TEST_CASE("FilteredDisk")
 
     SECTION("filter odd")
     {
-        BufferedDisk bd(&d, num_test_entries * 4);
+        BufferedDisk bd("test_file.bin", num_test_entries * 4);
         // filter every other entry (starting with 0)
         bitfield filter(num_test_entries);
         for (int i = 0; i < num_test_entries; ++i) {

@@ -51,11 +51,11 @@ const uint16_t kBC = kB * kC;
 // This (times k) is the length of the metadata that must be kept for each entry. For example,
 // for a table 4 entry, we must keep 4k additional bits for each entry, which is used to
 // compute f5.
-static const uint8_t kVectorLens[] = {0, 0, 1, 2, 4, 4, 3, 2};
+static constexpr uint8_t kVectorLens[] = {0, 0, 1, 2, 4, 4, 3, 2};
 
-uint16_t L_targets[2][kBC][kExtraBitsPow];
-bool initialized = false;
-void load_tables()
+extern uint16_t L_targets[2][kBC][kExtraBitsPow];
+extern bool initialized;
+inline void load_tables()
 {
     for (uint8_t parity = 0; parity < 2; parity++) {
         for (uint16_t i = 0; i < kBC; i++) {
@@ -101,8 +101,10 @@ public:
     inline void ReloadKey() {}
 
     // Performs one evaluation of the F function on input L of k bits.
-    inline Bits CalculateF(const Bits& L) const
+    template <typename T>
+    inline BitsGeneric<T> CalculateF(const BitsGeneric<T>& L) const
     {
+        using TBits = BitsGeneric<T>;
         uint16_t num_output_bits = k_;
         uint16_t block_size_bits = kF1BlockSizeBits;
 
@@ -124,20 +126,20 @@ public:
         const bool spans_two_blocks = bits_of_L < num_output_bits;
 
         uint8_t ciphertext_bytes[kF1BlockSizeBits / 8];
-        Bits output_bits;
+        TBits output_bits;
 
         // This counter is used to initialize words 12 and 13 of ChaCha8
         // initial state (4x4 matrix of 32-bit words). This is similar to
         // encrypting plaintext at a given offset, but we have no
         // plaintext, so no XORing at the end.
         chacha8_get_keystream(&this->enc_ctx_, counter, 1, ciphertext_bytes);
-        Bits ciphertext0(ciphertext_bytes, block_size_bits / 8, block_size_bits);
+        TBits ciphertext0(ciphertext_bytes, block_size_bits / 8, block_size_bits);
 
         if (spans_two_blocks) {
             // Performs another encryption if necessary
             ++counter;
             chacha8_get_keystream(&this->enc_ctx_, counter, 1, ciphertext_bytes);
-            Bits ciphertext1(ciphertext_bytes, block_size_bits / 8, block_size_bits);
+            TBits ciphertext1(ciphertext_bytes, block_size_bits / 8, block_size_bits);
             output_bits = ciphertext0.Slice(bits_before_L) +
                           ciphertext1.Slice(0, num_output_bits - bits_of_L);
         } else {
@@ -146,15 +148,16 @@ public:
 
         // Adds the first few bits of L to the end of the output, production k + kExtraBits of
         // output
-        Bits extra_data = L.Slice(0, kExtraBits);
+        TBits extra_data = L.Slice(0, kExtraBits);
         if (extra_data.GetSize() < kExtraBits) {
-            extra_data += Bits(0, kExtraBits - extra_data.GetSize());
+            extra_data += TBits(0, kExtraBits - extra_data.GetSize());
         }
         return output_bits + extra_data;
     }
 
     // Returns an evaluation of F1(L), and the metadata (L) that must be stored to evaluate F2.
-    inline std::pair<Bits, Bits> CalculateBucket(const Bits& L) const
+    template <typename T>
+    inline std::pair<BitsGeneric<T>, BitsGeneric<T>> CalculateBucket(const BitsGeneric<T>& L) const
     {
         return std::make_pair(CalculateF(L), L);
     }
@@ -222,14 +225,17 @@ public:
     inline void ReloadKey() {}
 
     // Performs one evaluation of the f function.
-    inline std::pair<Bits, Bits> CalculateBucket(const Bits& y1, const Bits& L, const Bits& R) const
+    template <typename T>
+    inline std::pair<BitsGeneric<T>, BitsGeneric<T>> CalculateBucket(
+        const BitsGeneric<T>& y1, const BitsGeneric<T>& L, const BitsGeneric<T>& R) const
     {
-        Bits input;
+        using TBits = BitsGeneric<T>;
+        TBits input;
         uint8_t input_bytes[64];
         uint8_t hash_bytes[32];
         blake3_hasher hasher;
         uint64_t f;
-        Bits c;
+        TBits c;
 
         if (table_index_ < 4) {
             c = L + R;
@@ -255,12 +261,12 @@ public:
             uint8_t end_byte = cdiv(end_bit, 8);
 
             // TODO: proper support for partial bytes in Bits ctor
-            c = Bits(hash_bytes + start_byte, end_byte - start_byte, (end_byte - start_byte) * 8);
+            c = TBits(hash_bytes + start_byte, end_byte - start_byte, (end_byte - start_byte) * 8);
 
             c = c.Slice((k_ + kExtraBits) % 8, end_bit - start_byte * 8);
         }
 
-        return std::make_pair(Bits(f, k_ + kExtraBits), c);
+        return std::make_pair(TBits(f, k_ + kExtraBits), c);
     }
 
     // Given two buckets with entries (y values), computes which y values match, and returns a list
@@ -277,22 +283,22 @@ public:
     // any R value matches. This function can be further optimized by removing the inner loop, and
     // being more careful with memory allocation.
     inline int32_t FindMatches(
-        const std::vector<PlotEntry>& bucket_L,
-        const std::vector<PlotEntry>& bucket_R,
+        const std::vector<uint64_t>& L_y,
+        const std::vector<uint64_t>& R_y,
         uint16_t *idx_L,
         uint16_t *idx_R)
     {
         int32_t idx_count = 0;
-        uint16_t parity = (bucket_L[0].y / kBC) % 2;
+        const uint16_t parity = (L_y[0] / kBC) % 2;
 
         for (size_t yl : rmap_clean) {
             this->rmap[yl].count = 0;
         }
         rmap_clean.clear();
 
-        uint64_t remove = (bucket_R[0].y / kBC) * kBC;
-        for (size_t pos_R = 0; pos_R < bucket_R.size(); pos_R++) {
-            uint64_t r_y = bucket_R[pos_R].y - remove;
+        uint64_t remove = (R_y[0] / kBC) * kBC;
+        for (size_t pos_R = 0; pos_R < R_y.size(); pos_R++) {
+            uint64_t r_y = R_y[pos_R] - remove;
 
             if (!rmap[r_y].count) {
                 rmap[r_y].pos = pos_R;
@@ -302,8 +308,8 @@ public:
         }
 
         uint64_t remove_y = remove - kBC;
-        for (size_t pos_L = 0; pos_L < bucket_L.size(); pos_L++) {
-            uint64_t r = bucket_L[pos_L].y - remove_y;
+        for (size_t pos_L = 0; pos_L < L_y.size(); pos_L++) {
+            uint64_t r = L_y[pos_L] - remove_y;
             for (uint8_t i = 0; i < kExtraBitsPow; i++) {
                 uint16_t r_target = L_targets[parity][r][i];
                 for (size_t j = 0; j < rmap[r_target].count; j++) {
